@@ -112,17 +112,26 @@
     /* Player playlists */
     #playlistsWrap{display:none}
     .playlist-deck{display:flex;flex-direction:column;gap:18px}
+    .playlist-roster{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;border:1px solid #2a3342;border-radius:14px;background:rgba(8,12,18,.58)}
+    .playlist-roster button,.playlist-action{border:1px solid #334054;border-radius:999px;background:#111a25;color:#dce6f7;padding:8px 12px;cursor:pointer;font-weight:700}
+    .playlist-roster button:hover,.playlist-action:hover{border-color:var(--playlist-accent,#46d3ff);color:#fff}
+    .playlist-roster button[data-active=true]{background:var(--playlist-accent,#46d3ff);border-color:transparent;color:#061018}
     .playlist-card{--playlist-accent:#f2c14e;position:relative;overflow:hidden;border:1px solid #2a3342;border-radius:14px;
       background:linear-gradient(135deg,#111721 0%,#0d141b 48%,#17140e 100%);box-shadow:0 18px 50px rgba(0,0,0,.28)}
+    .playlist-card.highlight{outline:2px solid var(--playlist-accent);animation:flash 1.4s ease-out 0s 1}
     .playlist-card::before{content:"";position:absolute;inset:0;pointer-events:none;
       background:linear-gradient(90deg,color-mix(in srgb,var(--playlist-accent) 18%,transparent),transparent 34%),
       repeating-linear-gradient(90deg,transparent 0 18px,rgba(255,255,255,.025) 18px 19px)}
     .playlist-shell{position:relative;display:grid;grid-template-columns:minmax(300px,420px) 1fr}
     .playlist-panel{padding:18px;background:linear-gradient(180deg,color-mix(in srgb,var(--playlist-accent) 13%,#111721),rgba(12,17,24,.96));
       border-right:1px solid #2a3342;display:flex;flex-direction:column;gap:14px}
+    .playlist-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+    .playlist-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+    .playlist-action{font-size:13px;padding:7px 10px}
     .playlist-kicker{color:var(--playlist-accent);font-size:13px;font-weight:700;text-transform:uppercase}
     .playlist-card h2{margin:0;font-size:30px;line-height:1.05}
     .playlist-vibe{color:#d8dfeb;margin:0;font-size:15px}
+    .playlist-count{color:#b6c1d3;font-size:13px;font-weight:700}
     .spotify-frame{width:100%;height:352px;border:0;border-radius:12px;background:#0b0e12;box-shadow:0 10px 26px rgba(0,0,0,.3)}
     .spotify-link{align-self:flex-start;border:1px solid color-mix(in srgb,var(--playlist-accent) 55%,#263149);border-radius:999px;
       padding:8px 12px;background:rgba(8,12,18,.55);color:#fff;font-weight:700}
@@ -136,9 +145,14 @@
     .track-copy h4 span{color:#c7d0df;font-size:13px;font-weight:600}
     .track-copy p{margin:4px 0 0;color:#e7edf6}
     .track-copy strong{color:var(--playlist-accent)}
+    .playlist-card.is-collapsed .playlist-shell{grid-template-columns:1fr}
+    .playlist-card.is-collapsed .playlist-panel{border-right:0}
+    .playlist-card.is-collapsed .spotify-frame,.playlist-card.is-collapsed .spotify-link,.playlist-card.is-collapsed .playlist-notes{display:none}
     @media (max-width:820px){
       .playlist-shell{grid-template-columns:1fr}
       .playlist-panel{border-right:0;border-bottom:1px solid #2a3342}
+      .playlist-heading{flex-direction:column}
+      .playlist-actions{justify-content:flex-start}
       .spotify-frame{height:380px}
     }
     /* Reference modal */
@@ -333,11 +347,13 @@
     function currentSlugFromURL(){
       const h=(location.hash||"").replace(/^#/,"").trim();
       if(h.startsWith("journal/")) return { journal:h.slice(8) };
+      if(h.startsWith("playlist/")) return { playlist:decodeURIComponent(h.slice(9)) };
       if(h) return { slug:h };
       const p=new URLSearchParams(location.search);
       const view=(p.get("view")||"").trim();
       const slug=(p.get("slug")||"").trim();
-      return { slug: slug || "", view: view || "" };
+      const playlist=(p.get("playlist")||"").trim();
+      return { slug: slug || "", playlist: playlist || "", view: view || "" };
     }
     function setSlugInURL(slug){
       const url=new URL(window.location.href); url.hash=slug; url.searchParams.set("slug",slug);
@@ -345,6 +361,14 @@
     }
     function setJournalURL(slug){
       const url=new URL(window.location.href); url.hash=`journal/${slug}`; url.searchParams.set("view","journal");
+      history.replaceState(null,"",url);
+    }
+    function setPlaylistURL(slug){
+      const url=new URL(window.location.href);
+      url.hash=`playlist/${encodeURIComponent(slug)}`;
+      url.searchParams.set("view","playlists");
+      url.searchParams.set("playlist",slug);
+      url.searchParams.delete("slug");
       history.replaceState(null,"",url);
     }
     let highlightTimer=null;
@@ -361,12 +385,29 @@
       el.scrollIntoView({behavior:"smooth",block:"start"});
       if(flash){ el.classList.add("highlight"); setTimeout(()=>el.classList.remove("highlight"),2000); }
     }
+    function focusPlaylistBySlug(slug,flash=true){
+      if(!slug) return;
+      if(viewState.mode!=='playlists') toggleTo('playlists',false);
+      viewState.collapsedPlaylists.delete(slug);
+      renderPlaylists();
+      const el=document.getElementById('playlist-'+slug); if(!el) return;
+      el.scrollIntoView({behavior:"smooth",block:"start"});
+      if(flash){ el.classList.add("highlight"); setTimeout(()=>el.classList.remove("highlight"),2000); }
+    }
     async function copyPermalink(slug){
       const url=new URL(window.location.href); url.hash=slug; url.searchParams.set("slug",slug);
       await navigator.clipboard.writeText(url.toString());
     }
     async function copyJournalPermalink(slug){
       const url=new URL(window.location.href); url.hash=`journal/${slug}`; url.searchParams.set("view","journal");
+      await navigator.clipboard.writeText(url.toString());
+    }
+    async function copyPlaylistPermalink(slug){
+      const url=new URL(window.location.href);
+      url.hash=`playlist/${encodeURIComponent(slug)}`;
+      url.searchParams.set("view","playlists");
+      url.searchParams.set("playlist",slug);
+      url.searchParams.delete("slug");
       await navigator.clipboard.writeText(url.toString());
     }
     function pickQuip(kind){
@@ -442,6 +483,7 @@
     ];
     const PLAYER_PLAYLISTS=[
       {
+        slug:"brand",
         player:"Brand",
         subtitle:"Road-worn wonder, loyal rage, and the shape of a home worth finding.",
         accent:"#f2c14e",
@@ -607,7 +649,7 @@
       showAllTags:false, showAllJournalTags:false,
       sortMode:'date_desc'
     };
-    let viewState={ mode:'cards', cy:null, layout:'cose', highlightNeighbors:false, graphTypeFilter:null };
+    let viewState={ mode:'cards', cy:null, layout:'cose', highlightNeighbors:false, graphTypeFilter:null, collapsedPlaylists:new Set() };
 
     // Build search indexes
     function buildIndex(){
@@ -734,6 +776,12 @@
     function markdownInline(value){
       const safe=escapeHTML(value);
       return (window.marked && marked.parseInline) ? marked.parseInline(safe) : safe;
+    }
+    function slugify(value){
+      return String(value || 'playlist').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || 'playlist';
+    }
+    function playlistSlug(list){
+      return list.slug || slugify(list.player);
     }
 
     // Cross-link helper for lore bodies
@@ -875,8 +923,22 @@
     function renderPlaylists(){
       const deck=document.getElementById('playlistDeck');
       const counts=document.getElementById('counts');
-      counts.textContent=`${PLAYER_PLAYLISTS.length} player playlist${PLAYER_PLAYLISTS.length===1?'':'s'}`;
-      deck.innerHTML=PLAYER_PLAYLISTS.map(list=>{
+      const activeSlug=currentSlugFromURL().playlist || '';
+      const totalTracks=PLAYER_PLAYLISTS.reduce((sum,list)=>sum+(list.tracks||[]).length,0);
+      counts.textContent=`${PLAYER_PLAYLISTS.length} player playlist${PLAYER_PLAYLISTS.length===1?'':'s'} / ${totalTracks} song note${totalTracks===1?'':'s'}`;
+      const roster=`
+        <div class="playlist-roster" aria-label="Player playlist shortcuts">
+          ${PLAYER_PLAYLISTS.map(list=>{
+            const slug=playlistSlug(list);
+            return `<button type="button" data-playlist-jump="${escapeHTML(slug)}" data-active="${slug===activeSlug?'true':'false'}">${escapeHTML(list.player)}</button>`;
+          }).join('')}
+          <button type="button" data-playlist-expand-all>Expand all</button>
+          <button type="button" data-playlist-collapse-all>Minimize all</button>
+        </div>
+      `;
+      const cards=PLAYER_PLAYLISTS.map(list=>{
+        const slug=playlistSlug(list);
+        const isCollapsed=viewState.collapsedPlaylists.has(slug);
         const tracks=(list.tracks||[]).map((track,index)=>`
           <li class="playlist-track">
             <div class="track-index">${String(index+1).padStart(2,'0')}</div>
@@ -887,12 +949,21 @@
           </li>
         `).join('');
         return `
-          <article class="playlist-card" style="--playlist-accent:${escapeHTML(list.accent || '#46d3ff')}">
+          <article class="playlist-card ${isCollapsed?'is-collapsed':''}" id="playlist-${escapeHTML(slug)}" style="--playlist-accent:${escapeHTML(list.accent || '#46d3ff')}">
             <div class="playlist-shell">
               <section class="playlist-panel">
-                <div class="playlist-kicker">Player playlist</div>
-                <h2>${escapeHTML(list.player)}</h2>
+                <div class="playlist-heading">
+                  <div>
+                    <div class="playlist-kicker">Player playlist</div>
+                    <h2>${escapeHTML(list.player)}</h2>
+                  </div>
+                  <div class="playlist-actions">
+                    <button type="button" class="playlist-action" data-playlist-link="${escapeHTML(slug)}">Link</button>
+                    <button type="button" class="playlist-action" data-playlist-toggle="${escapeHTML(slug)}" aria-expanded="${isCollapsed?'false':'true'}">${isCollapsed?'Expand':'Minimize'}</button>
+                  </div>
+                </div>
                 <p class="playlist-vibe">${escapeHTML(list.subtitle || '')}</p>
+                <div class="playlist-count">${(list.tracks||[]).length} song note${(list.tracks||[]).length===1?'':'s'}</div>
                 <iframe class="spotify-frame" title="${escapeHTML(list.player)} Spotify playlist" src="${escapeHTML(list.embedSrc)}" loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>
                 <a class="spotify-link" href="${escapeHTML(list.spotifyUrl)}" target="_blank" rel="noopener">Open in Spotify</a>
               </section>
@@ -904,6 +975,43 @@
           </article>
         `;
       }).join('');
+      deck.innerHTML=roster+cards;
+
+      deck.querySelectorAll('[data-playlist-jump]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const slug=btn.getAttribute('data-playlist-jump');
+          setPlaylistURL(slug);
+          focusPlaylistBySlug(slug,true);
+        });
+      });
+      deck.querySelectorAll('[data-playlist-toggle]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const slug=btn.getAttribute('data-playlist-toggle');
+          if(viewState.collapsedPlaylists.has(slug)){ viewState.collapsedPlaylists.delete(slug); }
+          else{ viewState.collapsedPlaylists.add(slug); }
+          renderPlaylists();
+        });
+      });
+      deck.querySelectorAll('[data-playlist-link]').forEach(btn=>{
+        btn.addEventListener('click', async ()=>{
+          const slug=btn.getAttribute('data-playlist-link');
+          setPlaylistURL(slug);
+          viewState.collapsedPlaylists.delete(slug);
+          renderPlaylists();
+          await copyPlaylistPermalink(slug);
+          const copiedBtn=deck.querySelector(`[data-playlist-link="${slug}"]`);
+          if(copiedBtn){ copiedBtn.textContent='Copied!'; setTimeout(()=>copiedBtn.textContent='Link',900); }
+        });
+      });
+      const expandAll=deck.querySelector('[data-playlist-expand-all]');
+      if(expandAll){ expandAll.addEventListener('click', ()=>{ viewState.collapsedPlaylists.clear(); renderPlaylists(); }); }
+      const collapseAll=deck.querySelector('[data-playlist-collapse-all]');
+      if(collapseAll){
+        collapseAll.addEventListener('click', ()=>{
+          PLAYER_PLAYLISTS.forEach(list=>viewState.collapsedPlaylists.add(playlistSlug(list)));
+          renderPlaylists();
+        });
+      }
     }
 
     // --- Graph view ---
@@ -1293,7 +1401,8 @@
     const init = currentSlugFromURL();
     const qs = new URLSearchParams(location.search);
     const want = (qs.get('view')||'').toLowerCase();
-    if(want==='journal'){ toggleTo('journal', false); }
+    if(init.playlist){ toggleTo('playlists', false); }
+    else if(want==='journal'){ toggleTo('journal', false); }
     else if(want==='graph'){ toggleTo('graph', false); }
     else if(want==='list'){ toggleTo('list', false); }
     else if(want==='refs'){ toggleTo('refs', false); }
@@ -1303,18 +1412,21 @@
     render();
 
     // Focus if URL has deep link
-    if(init.journal){ focusJournalBySlug(init.journal, true); }
+    if(init.playlist){ focusPlaylistBySlug(init.playlist, true); }
+    else if(init.journal){ focusJournalBySlug(init.journal, true); }
     else if(init.slug){ focusBySlug(init.slug, true); }
 
     // React to navigation changes (hash/query)
     window.addEventListener('hashchange', ()=>{
       const cur=currentSlugFromURL();
-      if(cur.journal){ toggleTo('journal', false); focusJournalBySlug(cur.journal, true); }
+      if(cur.playlist){ toggleTo('playlists', false); focusPlaylistBySlug(cur.playlist, true); }
+      else if(cur.journal){ toggleTo('journal', false); focusJournalBySlug(cur.journal, true); }
       else if(cur.slug){ toggleTo('cards', false); focusBySlug(cur.slug, true); }
     });
     window.addEventListener('popstate', ()=>{
       const cur=currentSlugFromURL();
-      if(cur.journal){ toggleTo('journal', false); focusJournalBySlug(cur.journal, true); }
+      if(cur.playlist){ toggleTo('playlists', false); focusPlaylistBySlug(cur.playlist, true); }
+      else if(cur.journal){ toggleTo('journal', false); focusJournalBySlug(cur.journal, true); }
       else if(cur.slug){ toggleTo('cards', false); focusBySlug(cur.slug, true); }
     });
   </script>
