@@ -148,6 +148,7 @@
     .track-note p:first-child{margin-top:0}
     .track-note p:last-child{margin-bottom:0}
     .track-copy strong{color:var(--playlist-accent)}
+    .playlist-empty-notes{padding:18px;border:1px dashed #334054;border-radius:12px;color:#b6c1d3;background:rgba(8,12,18,.38)}
     .playlist-card.is-collapsed .playlist-shell{grid-template-columns:1fr}
     .playlist-card.is-collapsed .playlist-panel{border-right:0}
     .playlist-card.is-collapsed .spotify-frame,.playlist-card.is-collapsed .spotify-link,.playlist-card.is-collapsed .playlist-notes{display:none}
@@ -934,6 +935,15 @@ And Corven Mael has won.`
             note:"**Party Jams - Brand**\n\nOur big, strong boy. The poor calf deserves better than he's gotten. \"Boy child mustn't tremble, 'cos he came without a name\"."
           }
         ]
+      },
+      {
+        slug:"little-odd",
+        player:"Little Odd",
+        subtitle:"A player playlist for Little Odd. Song notes are still being gathered.",
+        accent:"#83d7c5",
+        spotifyUrl:"https://open.spotify.com/playlist/6Y3jYZKsUnmp3TS39jLZ8W",
+        embedSrc:"https://open.spotify.com/embed/playlist/6Y3jYZKsUnmp3TS39jLZ8W?utm_source=generator&si=b6a32fc2d84b4bb0",
+        tracks:[]
       }
     ];
     const QUIPS={
@@ -1306,7 +1316,7 @@ And Corven Mael has won.`
       const cards=PLAYER_PLAYLISTS.map(list=>{
         const slug=playlistSlug(list);
         const isCollapsed=viewState.collapsedPlaylists.has(slug);
-        const tracks=(list.tracks||[]).map((track,index)=>`
+        const trackRows=(list.tracks||[]).map((track,index)=>`
           <li class="playlist-track">
             <div class="track-index">${String(index+1).padStart(2,'0')}</div>
             <div class="track-copy">
@@ -1315,6 +1325,10 @@ And Corven Mael has won.`
             </div>
           </li>
         `).join('');
+        const noteCount=(list.tracks||[]).length;
+        const notesContent=noteCount
+          ? `<ol class="track-list">${trackRows}</ol>`
+          : `<div class="playlist-empty-notes">Song notes coming soon.</div>`;
         return `
           <article class="playlist-card ${isCollapsed?'is-collapsed':''}" id="playlist-${escapeHTML(slug)}" style="--playlist-accent:${escapeHTML(list.accent || '#46d3ff')}">
             <div class="playlist-shell">
@@ -1330,13 +1344,13 @@ And Corven Mael has won.`
                   </div>
                 </div>
                 <p class="playlist-vibe">${escapeHTML(list.subtitle || '')}</p>
-                <div class="playlist-count">${(list.tracks||[]).length} song note${(list.tracks||[]).length===1?'':'s'}</div>
+                <div class="playlist-count">${noteCount ? `${noteCount} song note${noteCount===1?'':'s'}` : 'Song notes coming soon'}</div>
                 <iframe class="spotify-frame" title="${escapeHTML(list.player)} Spotify playlist" src="${escapeHTML(list.embedSrc)}" loading="lazy" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>
                 <a class="spotify-link" href="${escapeHTML(list.spotifyUrl)}" target="_blank" rel="noopener">Open in Spotify</a>
               </section>
               <section class="playlist-notes">
                 <h3>Song Notes</h3>
-                <ol class="track-list">${tracks}</ol>
+                ${notesContent}
               </section>
             </div>
           </article>
